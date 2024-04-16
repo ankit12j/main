@@ -1,0 +1,360 @@
+-- ddw_incoming = Bronze
+-- ddw_process  = Silver
+-- ddw          = Gold
+-- CC           = Computed Column
+-- SS           = Source System
+
+------------------
+--Pattern 1: DIID
+------------------
+
+-- Gold --> Bronze records for current date
+-- Gold <-- Bronze (Current Date)
+-- Gold <-- Silver (Previous Day)
+-- Gold --> Gold (Previous Day)
+
+------------------
+
+-- Step 1: "Get" all dates loaded in "Bronze"                                                | Get date_ids from bronze
+-- Step 2: "Delete" all records from Gold, w.f.c:
+    -- date_ids in Bronze AND                                                                | Delete all records with date_ids in Bronze
+    -- SS as "ADJ" in Bronze AND                                                             | Delete all records with SS as "ADJ"
+    -- load_date as current date in Bronze                                                   | Delete current date records
+-- Step 3: "Insert" Data into Gold:
+    -- Step 3.1: Load from Bronze (CC: SS ="ADJ", CC: load_date as CURRENT_DATE())           | Insert records from Bronze
+    -- Step 3.2: Load from Silver tables "ddw_process.inventory_fct", "ddw_process.sale_fct" | Insert records from Sliver of previous day
+              -- (CC: Source System as "INS", CC: load_date as CURRENT_DATE()), w.f.c:       | In Summary we are taking Silver records from previous day and inserting in Gold
+              -- Sale_date, Inventory_Date as Previous day                                   
+-- Step 4: "Delete" all records from Gold, with following criteria:                          | Delete records from Gold for prervious date, and SS as "INS"                                             
+    -- date_id as previous date                                                              | In Summary we delete from Gold previous day records
+    -- SS as "INS"
+
+------------------
+
+--Transformations Observed:
+-- Cast as INT, NUMERIC and Date
+-- Computed columns concat, cast
+------------------
+
+--clearance_fct_adj_gcp_unload_dates.sql
+--Purpose: - Get all dates for which fact table data needs to be deleted.
+--         - This table has source data to be loaded, which will be loaded later
+-- #standardSQL
+
+select 
+    STRING_AGG(t_date order by t_date ASC) as date_list 
+FROM 
+(
+    select 
+        distinct CONCAT('\'',FORMAT_DATE('%Y-%m-%d', CAST(PARSE_DATE('%Y%m%d',cast(date_id as STRING)) AS DATE) ),'\'') as t_date 
+    from `ddw_incoming.clearance_fct_adj_gcp_unload`
+)
+
+--clearance_fct_adj_gcp_unload_delete.sql
+--Purpose: Delete all records in clearance_fact for above dates
+-- #standardSQL
+
+DELETE 
+FROM `@@PROJECT.ddw.clearance_fct`
+WHERE load_date =  current_date()
+  AND source_system = 'ADJ'
+  AND date_id in (@@DATELIST);
+
+--clearance_fct_adj_gcp_unload_insert.sql
+-- Purpose: Load data from above for which dates were agg to be deleted
+-- #standardSQL
+
+INSERT INTO `@@PROJECT.ddw.
+
+` (
+   date_id
+ , organization_hierarchy_id
+ , product_id
+ , current_unit_retail
+ , clr_type
+ , ecm_oh_clr_units
+ , ecm_oh_clr_rtl
+ , ecm_oh_clr_cst
+ , ecm_oh_aged_units
+ , ecm_oh_aged_rtl
+ , ecm_oh_aged_cst
+ , ecm_oh_mos_units
+ , ecm_oh_mos_rtl
+ , ecm_oh_mos_cst
+ , ecm_it_clr_units
+ , ecm_it_clr_rtl
+ , ecm_it_clr_cst
+ , ecm_it_aged_units
+ , ecm_it_aged_rtl
+ , ecm_it_aged_cst
+ , ecm_it_mos_units
+ , ecm_it_mos_rtl
+ , ecm_it_mos_cst
+ , ecm_ship_trf_clr_units
+ , ecm_ship_trf_clr_rtl
+ , ecm_ship_trf_clr_cst
+ , ecm_ship_trf_aged_units
+ , ecm_ship_trf_aged_rtl
+ , ecm_ship_trf_aged_cst
+ , ecm_ship_trf_mos_units
+ , ecm_ship_trf_mos_rtl
+ , ecm_ship_trf_mos_cst
+ , ecm_clr_net_sales_units
+ , ecm_clr_net_sales_rtl
+ , ecm_clr_net_sales_cst
+ , ecm_aged_net_sales_units
+ , ecm_aged_net_sales_rtl
+ , ecm_aged_net_sales_cst
+ , ecm_mos_net_sales_units
+ , ecm_mos_net_sales_rtl
+ , ecm_mos_net_sales_cst
+ , date_added
+ , source_system
+ , load_date
+)
+SELECT   CAST(PARSE_DATE('%Y%m%d',cast(date_id as STRING)) AS DATE) AS date_id
+       , organization_hierarchy_id
+       , product_id
+       , CAST(current_unit_retail AS NUMERIC) AS current_unit_retail
+       ,  clr_type
+       , 0 AS ecm_oh_clr_units
+       , 0 AS ecm_oh_clr_rtl
+       , 0 AS ecm_oh_clr_cst
+       , 0 AS ecm_oh_aged_units
+       , 0 AS ecm_oh_aged_rtl
+       , 0 AS ecm_oh_aged_cst
+       , 0 AS ecm_oh_mos_units
+       , 0 AS ecm_oh_mos_rtl
+       , 0 AS ecm_oh_mos_cst
+       , 0 AS ecm_it_clr_units
+       , 0 AS ecm_it_clr_rtl
+       , 0 AS ecm_it_clr_cst
+       , 0 AS ecm_it_aged_units
+       , 0 AS ecm_it_aged_rtl
+       , 0 AS ecm_it_aged_cst
+       , 0 AS ecm_it_mos_units
+       , 0 AS ecm_it_mos_rtl
+       , 0 AS ecm_it_mos_cst
+       , 0 AS ecm_ship_trf_clr_units
+       , 0 AS ecm_ship_trf_clr_rtl
+       , 0 AS ecm_ship_trf_clr_cst
+       , 0 AS ecm_ship_trf_aged_units
+       , 0 AS ecm_ship_trf_aged_rtl
+       , 0 AS ecm_ship_trf_aged_cst
+       , 0 AS ecm_ship_trf_mos_units
+       , 0 AS ecm_ship_trf_mos_rtl
+       , 0 AS ecm_ship_trf_mos_cst 
+	, cast(ecm_clr_net_sales_units as int64) ecm_clr_net_sales_units
+       , ecm_clr_net_sales_rtl
+       , ecm_clr_net_sales_cst
+       , cast(ecm_aged_net_sales_units as int64) ecm_aged_net_sales_units
+       , ecm_aged_net_sales_rtl
+       , ecm_aged_net_sales_cst
+       , cast(ecm_mos_net_sales_units as int64) ecm_mos_net_sales_units
+       , ecm_mos_net_sales_rtl
+       , ecm_mos_net_sales_cst
+	, CURRENT_TIMESTAMP AS date_added
+       , 'ADJ' AS source_system
+       , current_date()
+FROM   ddw_incoming.clearance_fct_adj_gcp_unload s;
+
+--clearance_fct_dates.sql
+-- #standardSQL
+
+select STRING_AGG(t_date order by t_date ASC) as date_list FROM (
+select distinct CONCAT('\'',FORMAT_DATE('%Y-%m-%d', inventory_date),'\'') as t_date from `ddw_process.inventory_fct`
+union all
+select distinct CONCAT('\'',FORMAT_DATE('%Y-%m-%d', sale_date),'\'') as t_date from `ddw_process.sale_fct`
+)
+
+
+
+---clearance_fct_main.sql
+-- Purpose: Insert data from sales_fct, inventory_fct
+INSERT INTO `@@PROJECT.ddw.clearance_fct` 
+(
+   date_id
+ , organization_hierarchy_id
+ , product_id
+ , current_unit_retail
+ , clr_type
+ , ecm_oh_clr_units
+ , ecm_oh_clr_rtl
+ , ecm_oh_clr_cst
+ , ecm_oh_aged_units
+ , ecm_oh_aged_rtl
+ , ecm_oh_aged_cst
+ , ecm_oh_mos_units
+ , ecm_oh_mos_rtl
+ , ecm_oh_mos_cst
+ , ecm_it_clr_units
+ , ecm_it_clr_rtl
+ , ecm_it_clr_cst
+ , ecm_it_aged_units
+ , ecm_it_aged_rtl
+ , ecm_it_aged_cst
+ , ecm_it_mos_units
+ , ecm_it_mos_rtl
+ , ecm_it_mos_cst
+ , ecm_ship_trf_clr_units
+ , ecm_ship_trf_clr_rtl
+ , ecm_ship_trf_clr_cst
+ , ecm_ship_trf_aged_units
+ , ecm_ship_trf_aged_rtl
+ , ecm_ship_trf_aged_cst
+ , ecm_ship_trf_mos_units
+ , ecm_ship_trf_mos_rtl
+ , ecm_ship_trf_mos_cst
+ , ecm_clr_net_sales_units
+ , ecm_clr_net_sales_rtl
+ , ecm_clr_net_sales_cst
+ , ecm_aged_net_sales_units
+ , ecm_aged_net_sales_rtl
+ , ecm_aged_net_sales_cst
+ , ecm_mos_net_sales_units
+ , ecm_mos_net_sales_rtl
+ , ecm_mos_net_sales_cst
+ , date_added
+ , source_system
+ , load_date
+)
+SELECT   COALESCE(sls.sale_date, inv.inventory_date) AS date_id
+       , COALESCE(sls.organization_hierarchy_id, inv.organization_hierarchy_id) AS organization_hierarchy_id
+       , COALESCE(sls.product_id, inv.product_id) AS product_id
+       , COALESCE(sls.sls_unit_price, inv.inv_unit_price, 0) AS current_unit_retail
+       , COALESCE(sls.sls_clr_type, inv.inv_clr_type, 'U') AS clr_type
+       , ifnull(inv.ecm_oh_clr_units,0)
+       , ifnull(inv.ecm_oh_clr_rtl,0)
+       , ifnull(inv.ecm_oh_clr_cst,0)
+       , ifnull(inv.ecm_oh_aged_units,0)
+       , ifnull(inv.ecm_oh_aged_rtl,0)
+       , ifnull(inv.ecm_oh_aged_cst,0)
+       , ifnull(inv.ecm_oh_mos_units,0)
+       , ifnull(inv.ecm_oh_mos_rtl,0)
+       , ifnull(inv.ecm_oh_mos_cst,0)
+       , ifnull(inv.ecm_it_clr_units,0)
+       , ifnull(inv.ecm_it_clr_rtl,0)
+       , ifnull(inv.ecm_it_clr_cst,0)
+       , ifnull(inv.ecm_it_aged_units,0)
+       , ifnull(inv.ecm_it_aged_rtl,0)
+       , ifnull(inv.ecm_it_aged_cst,0)
+       , ifnull(inv.ecm_it_mos_units,0)
+       , ifnull(inv.ecm_it_mos_rtl,0)
+       , ifnull(inv.ecm_it_mos_cst,0)
+       , ifnull(inv.ecm_ship_trf_clr_units,0)
+       , ifnull(inv.ecm_ship_trf_clr_rtl,0)
+       , ifnull(inv.ecm_ship_trf_clr_cst,0)
+       , ifnull(inv.ecm_ship_trf_aged_units,0)
+       , ifnull(inv.ecm_ship_trf_aged_rtl,0)
+       , ifnull(inv.ecm_ship_trf_aged_cst,0)
+       , ifnull(inv.ecm_ship_trf_mos_units,0)
+       , ifnull(inv.ecm_ship_trf_mos_rtl,0)
+       , ifnull(inv.ecm_ship_trf_mos_cst,0)
+       , ifnull(sls.ecm_clr_net_sales_units,0)
+       , ifnull(sls.ecm_clr_net_sales_rtl,0)
+       , ifnull(sls.ecm_clr_net_sales_cst,0)
+       , ifnull(sls.ecm_aged_net_sales_units,0)
+       , ifnull(sls.ecm_aged_net_sales_rtl,0)
+       , ifnull(sls.ecm_aged_net_sales_cst,0)
+       , ifnull(sls.ecm_mos_net_sales_units,0)
+      , ifnull(sls.ecm_mos_net_sales_rtl,0)
+      , ifnull(sls.ecm_mos_net_sales_cst,0)
+       , CURRENT_TIMESTAMP
+       , 'INS'
+       , current_date() AS load_date
+FROM   ( 
+SELECT   inventory_date
+                , organization_hierarchy_id
+                , product_id
+                ,  inv_unit_price
+                ,  inv_clr_type
+                , CASE WHEN inv_clr_type = 'C' THEN onhand_quantity          ELSE 0 END AS ecm_oh_clr_units
+                , CASE WHEN inv_clr_type = 'C' THEN onhand_retail_amount     ELSE 0 END AS ecm_oh_clr_rtl
+                , CASE WHEN inv_clr_type = 'C' THEN onhand_cost              ELSE 0 END AS ecm_oh_clr_cst
+                , CASE WHEN inv_clr_type = 'A' THEN onhand_quantity          ELSE 0 END AS ecm_oh_aged_units
+                , CASE WHEN inv_clr_type = 'A' THEN onhand_retail_amount     ELSE 0 END AS ecm_oh_aged_rtl
+                , CASE WHEN inv_clr_type = 'A' THEN onhand_cost              ELSE 0 END AS ecm_oh_aged_cst
+                , CASE WHEN inv_clr_type = 'M' THEN onhand_quantity          ELSE 0 END AS ecm_oh_mos_units
+                , CASE WHEN inv_clr_type = 'M' THEN onhand_retail_amount     ELSE 0 END AS ecm_oh_mos_rtl
+                , CASE WHEN inv_clr_type = 'M' THEN onhand_cost              ELSE 0 END AS ecm_oh_mos_cst
+                , CASE WHEN inv_clr_type = 'C' THEN in_transit_quantity      ELSE 0 END AS ecm_it_clr_units
+                , CASE WHEN inv_clr_type = 'C' THEN in_transit_retail_amount ELSE 0 END AS ecm_it_clr_rtl
+                , CASE WHEN inv_clr_type = 'C' THEN in_transit_cost          ELSE 0 END AS ecm_it_clr_cst
+                , CASE WHEN inv_clr_type = 'A' THEN in_transit_quantity      ELSE 0 END AS ecm_it_aged_units
+                , CASE WHEN inv_clr_type = 'A' THEN in_transit_retail_amount ELSE 0 END AS ecm_it_aged_rtl
+                , CASE WHEN inv_clr_type = 'A' THEN in_transit_cost          ELSE 0 END AS ecm_it_aged_cst
+                , CASE WHEN inv_clr_type = 'M' THEN in_transit_quantity      ELSE 0 END AS ecm_it_mos_units
+                , CASE WHEN inv_clr_type = 'M' THEN in_transit_retail_amount ELSE 0 END AS ecm_it_mos_rtl
+                , CASE WHEN inv_clr_type = 'M' THEN in_transit_cost          ELSE 0 END AS ecm_it_mos_cst
+                , CASE WHEN inv_clr_type = 'C' THEN ship_transfer_quantity   ELSE 0 END AS ecm_ship_trf_clr_units
+                , CASE WHEN inv_clr_type = 'C' THEN ship_transfer_amount     ELSE 0 END AS ecm_ship_trf_clr_rtl
+                , CASE WHEN inv_clr_type = 'C' THEN ship_transfer_cost       ELSE 0 END AS ecm_ship_trf_clr_cst
+                , CASE WHEN inv_clr_type = 'A' THEN ship_transfer_quantity   ELSE 0 END AS ecm_ship_trf_aged_units
+                , CASE WHEN inv_clr_type = 'A' THEN ship_transfer_amount     ELSE 0 END AS ecm_ship_trf_aged_rtl
+                , CASE WHEN inv_clr_type = 'A' THEN ship_transfer_cost       ELSE 0 END AS ecm_ship_trf_aged_cst
+                , CASE WHEN inv_clr_type = 'M' THEN ship_transfer_quantity   ELSE 0 END AS ecm_ship_trf_mos_units
+                , CASE WHEN inv_clr_type = 'M' THEN ship_transfer_amount     ELSE 0 END AS ecm_ship_trf_mos_rtl
+                , CASE WHEN inv_clr_type = 'M' THEN ship_transfer_cost       ELSE 0 END AS ecm_ship_trf_mos_cst
+       FROM     (select i.* 
+                        ,CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS inv_unit_price
+                        ,CASE WHEN CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) like '%.%7' THEN 'C'
+                       WHEN CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) like '%.%3' THEN 'A'
+                       WHEN CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) = '0.02'    THEN 'M'
+                       ELSE 'R' END AS inv_clr_type
+                   from  `@@PROJECT.ddw_process.inventory_fct`  i
+                  )
+         WHERE  ( 
+              CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) like '%.%7' 
+           OR CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) LIKE '%.%3' 
+           OR CONCAT(FORMAT("%d", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS int64)), SUBSTR(FORMAT("%.2f", CAST(CASE WHEN onhand_quantity = 0 THEN 0 ELSE CAST(onhand_retail_amount / onhand_quantity AS NUMERIC) END AS float64)), -3)) = '0.02'               )
+           AND      inventory_date =  date_add(current_date(), INTERVAL -1 DAY)
+       ) inv
+FULL OUTER JOIN
+( 
+ SELECT   sale_date
+        , organization_hierarchy_id
+        , product_id
+        , CAST(current_unit_retail AS NUMERIC) AS sls_unit_price
+        , CASE WHEN CONCAT(FORMAT("%d", CAST(sls_unit_price AS int64)), SUBSTR(FORMAT("%.2f", CAST(sls_unit_price AS float64)), -3)) like '%.%7' THEN 'C'
+               WHEN CONCAT(FORMAT("%d", CAST(sls_unit_price AS int64)), SUBSTR(FORMAT("%.2f", CAST(sls_unit_price AS float64)), -3)) like '%.%3' THEN 'A'
+               WHEN CONCAT(FORMAT("%d", CAST(sls_unit_price AS int64)), SUBSTR(FORMAT("%.2f", CAST(sls_unit_price AS float64)), -3)) = '0.02'    THEN 'M'
+               ELSE 'R' END AS sls_clr_type
+        , CASE WHEN sls_clr_type = 'C' THEN total_units          ELSE 0 END AS ecm_clr_net_sales_units
+        , CASE WHEN sls_clr_type = 'C' THEN total_net_sales      ELSE 0 END AS ecm_clr_net_sales_rtl
+        , CASE WHEN sls_clr_type = 'C' THEN total_cost_of_sales  ELSE 0 END AS ecm_clr_net_sales_cst
+        , CASE WHEN sls_clr_type = 'A' THEN total_units          ELSE 0 END AS ecm_aged_net_sales_units
+        , CASE WHEN sls_clr_type = 'A' THEN total_net_sales      ELSE 0 END AS ecm_aged_net_sales_rtl
+        , CASE WHEN sls_clr_type = 'A' THEN total_cost_of_sales  ELSE 0 END AS ecm_aged_net_sales_cst
+        , CASE WHEN sls_clr_type = 'M' THEN total_units          ELSE 0 END AS ecm_mos_net_sales_units
+        , CASE WHEN sls_clr_type = 'M' THEN total_net_sales      ELSE 0 END AS ecm_mos_net_sales_rtl
+        , CASE WHEN sls_clr_type = 'M' THEN total_cost_of_sales  ELSE 0 END AS ecm_mos_net_sales_cst
+        FROM    (
+                    select s.*
+                          ,current_unit_retail AS sls_unit_price
+                , CASE WHEN CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) like '%.%7' THEN 'C'
+                       WHEN CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) like '%.%3' THEN 'A'
+                       WHEN CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) = '0.02'    THEN 'M'
+                       ELSE 'R' END AS sls_clr_type
+                      from  `@@PROJECT.ddw_process.sale_fct`  s
+   WHERE  (
+              CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) like '%.%7' 
+           OR CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) LIKE '%.%3' 
+           OR CONCAT(FORMAT("%d", CAST(current_unit_retail AS int64)), SUBSTR(FORMAT("%.2f", CAST(current_unit_retail AS float64)), -3)) = '0.02' 
+         )
+         AND      sale_date =  date_add(current_date(), INTERVAL -1 DAY)
+      )   
+) sls
+ON       inv.inventory_date = sls.sale_date
+AND      inv.organization_hierarchy_id = sls.organization_hierarchy_id
+AND      inv.product_id = sls.product_id;
+
+--clearance_fct_main_delete.sql
+
+#standardSQL
+
+DELETE 
+FROM `@@PROJECT.ddw.clearance_fct`
+WHERE    date_id =  date_add(current_date(), INTERVAL -1 DAY) -- Delete data for previous date
+AND      source_system = 'INS';
+
+

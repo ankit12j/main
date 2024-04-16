@@ -1,0 +1,153 @@
+------------------
+-- Pattern 2: DMC
+------------------
+
+Gold (D)	    --> Gold previous day records
+Gold (M)     <-- Silver records for current date (Update, Insert)
+Siver (CRS) <— Bronze records
+
+
+-- clr_sale_inv_org_prod_day_dates.sql
+-- Purpose: Source of data - ddw_process
+#standardSQL
+select STRING_AGG(t_date order by t_date ASC) as date_list FROM (
+select distinct CONCAT('\'',FORMAT_DATE('%Y-%m-%d', date_id),'\'') as t_date from `ddw_process.clr_sale_inv_org_prod_day`);
+
+-- clr_sale_inv_org_prod_day_delete.sql
+#standardSQL
+-- Purpose: Delete from target table previous day data --ddw
+DELETE 
+FROM ddw.clr_sale_inv_org_prod_day t
+where date_id =  date_add(current_date(), INTERVAL -1 DAY); -- Delete previous day data
+
+-- clr_sale_inv_org_prod_day_merge.sql
+-- Purpose: Insert data for only dates present in ddw_process
+#standardSQL
+
+merge into   `@@PROJECT.ddw.clr_sale_inv_org_prod_day`  t
+using   `@@PROJECT.ddw_process.clr_sale_inv_org_prod_day` s
+ on T.DATE_ID = S.DATE_ID
+and T.PRODUCT_ID = S.PRODUCT_ID
+and T.ORGANIZATION_HIERARCHY_ID = S.ORGANIZATION_HIERARCHY_ID
+and t.DATE_ID IN (@@DATELIST)
+when matched then
+update set 
+ T.CLR_COLOR_CODE = S.CLR_COLOR_CODE
+,T.CLR_COLOR_DATE_ID = S.CLR_COLOR_DATE_ID
+,T.CURRENT_UNIT_RETAIL = S.CURRENT_UNIT_RETAIL
+,T.NET_SALES_RTL = S.NET_SALES_RTL
+,T.NET_SALES_UNITS = S.NET_SALES_UNITS
+,T.NET_SALES_CST = S.NET_SALES_CST
+,T.SFS_SALES_RTL = S.SFS_SALES_RTL
+,T.SFS_SALES_UNITS = S.SFS_SALES_UNITS
+,T.SFS_SALES_CST = S.SFS_SALES_CST
+,T.BOPIS_SALES_RTL = S.BOPIS_SALES_RTL
+,T.BOPIS_SALES_UNITS = S.BOPIS_SALES_UNITS
+,T.BOPIS_SALES_CST = S.BOPIS_SALES_CST
+,T.POS_CLR_MD_RTL = S.POS_CLR_MD_RTL
+,T.OTHER_MD_RTL = S.OTHER_MD_RTL
+,T.OH_UNITS = S.OH_UNITS
+,T.OH_RTL = S.OH_RTL
+,T.OH_CST = S.OH_CST
+,T.IT_UNITS = S.IT_UNITS
+,T.IT_RTL = S.IT_RTL
+,T.IT_CST = S.IT_CST
+,T.DATE_ADDED = S.DATE_ADDED
+,T.ADDED_BY = S.ADDED_BY
+,T.DATE_LAST_MODIFIED = S.DATE_LAST_MODIFIED
+,T.LAST_MODIFIED_BY = S.LAST_MODIFIED_BY
+,T.SOURCE_SYSTEM = S.SOURCE_SYSTEM 
+when not matched then 
+insert (
+DATE_ID
+,PRODUCT_ID
+,ORGANIZATION_HIERARCHY_ID
+,CLR_COLOR_CODE
+,CLR_COLOR_DATE_ID
+,CURRENT_UNIT_RETAIL
+,NET_SALES_RTL
+,NET_SALES_UNITS
+,NET_SALES_CST
+,SFS_SALES_RTL
+,SFS_SALES_UNITS
+,SFS_SALES_CST
+,BOPIS_SALES_RTL
+,BOPIS_SALES_UNITS
+,BOPIS_SALES_CST
+,POS_CLR_MD_RTL
+,OTHER_MD_RTL
+,OH_UNITS
+,OH_RTL
+,OH_CST
+,IT_UNITS
+,IT_RTL
+,IT_CST
+,DATE_ADDED
+,ADDED_BY
+,DATE_LAST_MODIFIED
+,LAST_MODIFIED_BY
+,SOURCE_SYSTEM)
+values 
+(S.DATE_ID
+,S.PRODUCT_ID
+,S.ORGANIZATION_HIERARCHY_ID
+,S.CLR_COLOR_CODE
+,S.CLR_COLOR_DATE_ID
+,S.CURRENT_UNIT_RETAIL
+,S.NET_SALES_RTL
+,S.NET_SALES_UNITS
+,S.NET_SALES_CST
+,S.SFS_SALES_RTL
+,S.SFS_SALES_UNITS
+,S.SFS_SALES_CST
+,S.BOPIS_SALES_RTL
+,S.BOPIS_SALES_UNITS
+,S.BOPIS_SALES_CST
+,S.POS_CLR_MD_RTL
+,S.OTHER_MD_RTL
+,S.OH_UNITS
+,S.OH_RTL
+,S.OH_CST
+,S.IT_UNITS
+,S.IT_RTL
+,S.IT_CST
+,S.DATE_ADDED
+,S.ADDED_BY
+,S.DATE_LAST_MODIFIED
+,S.LAST_MODIFIED_BY
+,S.SOURCE_SYSTEM); 
+
+-- clr_sale_inv_org_prod_day_process.sql
+#standardSQL
+CREATE OR REPLACE TABLE  `@@PROJECT.ddw_process.clr_sale_inv_org_prod_day` as
+SELECT
+CAST(PARSE_DATE('%Y%m%d',cast(date_id as STRING)) AS DATE) AS DATE_ID
+,PRODUCT_ID
+,ORGANIZATION_HIERARCHY_ID
+,CLR_COLOR_CODE
+,CLR_COLOR_DATE_ID
+,CURRENT_UNIT_RETAIL
+,NET_SALES_RTL
+,NET_SALES_UNITS
+,NET_SALES_CST
+,SFS_SALES_RTL
+,SFS_SALES_UNITS
+,SFS_SALES_CST
+,BOPIS_SALES_RTL
+,BOPIS_SALES_UNITS
+,BOPIS_SALES_CST
+,POS_CLR_MD_RTL
+,OTHER_MD_RTL
+,OH_UNITS
+,OH_RTL
+,OH_CST
+,IT_UNITS
+,IT_RTL
+,IT_CST
+,CAST(FORMAT_TIMESTAMP("%F %T", date_added, "America/New_York") AS TIMESTAMP) as DATE_ADDED
+,ADDED_BY
+,CAST(FORMAT_TIMESTAMP("%F %T", date_last_modified, "America/New_York") AS TIMESTAMP) as DATE_LAST_MODIFIED
+,LAST_MODIFIED_BY
+,SOURCE_SYSTEM
+FROM `@@PROJECT.ddw_incoming.clr_sale_inv_org_prod_day`;
+

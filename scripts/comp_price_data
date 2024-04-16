@@ -1,0 +1,58 @@
+------------------
+-- Pattern 3 (DI):
+------------------
+
+Gold (D) --> Bronze price_dates
+Gold (I) <-- Bronze all records
+
+-- comp_price_data_dates.sql
+#standardSQL
+
+select STRING_AGG(t_date order by t_date ASC) as date_list FROM (
+select distinct CONCAT('\'',FORMAT_DATE('%Y-%m-%d', CAST(PARSE_DATE('%Y%m%d',cast(price_date as STRING)) AS DATE) ),'\'') as t_date
+from ddw_incoming.comp_price_data
+);
+
+--comp_price_data_delete.sql
+#standardSQL
+
+DELETE
+FROM `@@PROJECT.ddw.comp_price_data`
+WHERE  price_date in (@@DATELIST);
+
+--comp_price_data_insert.sql
+#standardSQL
+
+insert into  `@@PROJECT.ddw.comp_price_data`
+(PRICE_DATE
+,PRODUCT_ID
+,RETAILER_ID
+,RETAILER_PRODUCT_NUMBER
+,CURRENT_UNIT_RETAIL
+,DSGECOM_CURRENT_UNIT_RETAIL
+,PRODUCT_AVAILABILITY
+,MATCH_TYPE
+,CRAWL_DATE
+,SHIPPING_RETAIL
+,DSGECOM_SHIPPING_RETAIL
+,DATE_ADDED
+,PLECOM_CURRENT_UNIT_RETAIL
+)
+select 
+ CAST(PARSE_DATE('%Y%m%d',cast(price_date as STRING)) AS DATE) AS price_date
+,PRODUCT_ID
+,RETAILER_ID
+,RETAILER_PRODUCT_NUMBER
+,CURRENT_UNIT_RETAIL
+,DSGECOM_CURRENT_UNIT_RETAIL
+,PRODUCT_AVAILABILITY
+,MATCH_TYPE
+,CRAWL_DATE
+,SHIPPING_RETAIL
+,DSGECOM_SHIPPING_RETAIL
+,DATE_ADDED
+,PLECOM_CURRENT_UNIT_RETAIL
+from  `@@PROJECT.ddw_incoming.comp_price_data`;
+
+
+
